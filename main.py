@@ -31,10 +31,23 @@ def video_info():
                 }
                 for f in formats if f.get("vcodec") != "none"
             ]
+            audio_formats = [
+                {
+                    "format_id": f["format_id"],
+                    "ext": f["ext"],
+                    "abr": f.get("abr"),
+                    "filesize": f.get("filesize") or 0
+                }
+                for f in formats if f.get("vcodec") == "none"
+            ]
             return jsonify({
                 "title": info.get("title"),
                 "thumbnail": info.get("thumbnail"),
-                "formats": video_formats,
+                "duration": info.get("duration_string") or info.get("duration"),
+                "channel": info.get("uploader"),
+                "is_playlist": info.get("_type") == "playlist",
+                "video_formats": video_formats,
+                "audio_formats": audio_formats,
             })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -43,16 +56,19 @@ def video_info():
 def download_video():
     data = request.get_json()
     url = data.get("url")
-    format_id = data.get("format_id")  # use format_id to specify quality
+    format_id = data.get("format_id")
+    ext = data.get("ext", "mp4")  # default extension
 
     if not url or not format_id:
         return jsonify({"error": "URL and format_id are required"}), 400
 
-    filename = f"{uuid.uuid4()}.mp4"
+    filename = f"{uuid.uuid4()}.{ext}"
     ydl_opts = {
         "format": format_id,
         "outtmpl": filename,
-        "quiet": True
+        "quiet": True,
+        "noplaylist": True,
+        "merge_output_format": ext
     }
 
     try:
@@ -63,8 +79,11 @@ def download_video():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
-        if os.path.exists(filename):
-            os.remove(filename)
+        try:
+            if os.path.exists(filename):
+                os.remove(filename)
+        except:
+            pass
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
